@@ -11,6 +11,26 @@ parentDocSlug: ios-sdk
 > Refer to the [SDK version update guide](https://documentation.bloomreach.com/engagement/docs/ios-sdk-version-update) for details on updating to the next major version.
 
 ## Release Notes
+## Release Notes for 3.5.1
+#### May 27, 2025
+* Fixed:
+  * Fixes SafeArea insets usage for In-app dialog showing to accept app layout paddings
+  * Fixes and updates some links in the documentation
+  * Moves caching of In-app images to the background thread to not block the main UI thread
+
+
+## Release Notes for 3.5.0
+#### May 20, 2025
+* Added:
+  * IsRichText public: IsRichText has been made accessible for customers
+  * Custom font cache: Added cache for smooth run
+* Fixed:
+  * Content Block serialization: Removed CodableIngored, which caused an issue with RN
+  * Button style: Corrected button style key
+  * Identify customer: Resolved an issue where only the last identifyCustomer request was persisted due to the inAppRefreshCallback overwriting previous storeTrackEvent requests
+  * URLOpener: Refactored URLOpener to support async/callback-based handling, enabling delayed deep link/URL resolution without breaking existing synchronous logic
+
+
 ## Release Notes for 3.4.0
 #### April 22, 2025
 * Added:

@@ -129,6 +129,9 @@ final class InAppMessagesManager: InAppMessagesManagerType, @unchecked Sendable 
             return .init() // there is no image, call preload successful
         }
         for imageUrlString in imageUrlStrings {
+            if imageUrlString.isEmpty {
+                continue
+            }
             if cache.hasImageData(at: imageUrlString) {
                 continue
             }
@@ -365,28 +368,61 @@ final class InAppMessagesManager: InAppMessagesManagerType, @unchecked Sendable 
 
     let semaphore = DispatchSemaphore(value: 0)
 
-    private func extractFont(url: URL, fontSize: String?, size: CGFloat?) async -> InAppButtonFontData? {
+    private func extractFont(url: String, fontSize: String?, size: CGFloat?) async -> InAppButtonFontData? {
         await withCheckedContinuation { continuation in
-            if let data = try? Data(contentsOf: url),
-               let dataProvider = CGDataProvider(data: data as CFData),
-               let cgFont = CGFont(dataProvider) {
-                var fontData: InAppButtonFontData = .init()
-                var error: Unmanaged<CFError>?
-                if CTFontManagerRegisterGraphicsFont(cgFont, &error) {
-                    fontData.fontName = cgFont.postScriptName as? String
-                    CTFontManagerUnregisterGraphicsFont(cgFont, &error)
-                    let size = size ?? fontSize?.convertPxToFloatWithDefaultValue() ?? 13
-                    fontData.fontSize = size
-                    fontData.fontData = data.base64EncodedString()
+            DispatchQueue.global(qos: .background).async {
+                if let data = FileCache.shared.getOrDownloadFile(at: url),
+                   let dataProvider = CGDataProvider(data: data as CFData),
+                   let cgFont = CGFont(dataProvider) {
+                    var fontData: InAppButtonFontData = .init()
+                    var error: Unmanaged<CFError>?
+                    if CTFontManagerRegisterGraphicsFont(cgFont, &error) {
+                        fontData.fontName = cgFont.postScriptName as? String
+                        CTFontManagerUnregisterGraphicsFont(cgFont, &error)
+                        let size = size ?? fontSize?.convertPxToFloatWithDefaultValue() ?? 13
+                        fontData.fontSize = size
+                        fontData.fontData = data.base64EncodedString()
+                    } else {
+                        Exponea.logger.log(
+                            .error,
+                            message: "[InApp] Cant download custom font from url"
+                        )
+                    }
+                    continuation.resume(returning: fontData)
                 } else {
-                    Exponea.logger.log(
-                        .error,
-                        message: "[InApp] Cant download custom font from url"
-                    )
+                    continuation.resume(returning: nil)
                 }
-                continuation.resume(returning: fontData)
             }
         }
+    }
+
+    private func processMessages(_ inAppMessages: [InAppMessage]) async -> [InAppMessage] {
+        var output: [InAppMessage] = []
+        for message in inAppMessages {
+            var copy = message
+            preloadImage(for: copy)
+            if let titleConfig = copy.payload?.titleConfig,
+               let customFont = titleConfig.customFont {
+                copy.payload?.titleFontData = await extractFont(url: customFont, fontSize: nil, size: titleConfig.size)
+            }
+            if let bodyConfig = copy.payload?.bodyConfig,
+               let customFont = bodyConfig.customFont {
+                copy.payload?.bodyFontData = await extractFont(url: customFont, fontSize: nil, size: bodyConfig.size)
+            }
+            let buttons = copy.payload?.buttons ?? []
+            var updatedButtons: [InAppButtonPayload] = []
+            for button in buttons {
+                var copyButton = button
+                if let buttonConfig = copyButton.buttonConfig,
+                   let customFont = buttonConfig.fontURL {
+                    copyButton.fontData = await extractFont(url: customFont, fontSize: nil, size: CGFloat(buttonConfig.size))
+                }
+                updatedButtons.append(copyButton)
+            }
+            copy.payload?.buttons = updatedButtons
+            output.append(copy)
+        }
+        return output
     }
 
     private func fetchImagesAndFonts(inAppMessages: [InAppMessage]) async -> [InAppMessage] {
@@ -395,30 +431,11 @@ final class InAppMessagesManager: InAppMessagesManagerType, @unchecked Sendable 
                 continuation.resume(returning: [])
                 return
             }
-            Task(priority: .background) { @MainActor in
-                var messagesToReturn: [InAppMessage] = []
-                for message in inAppMessages {
-                    var copy = message
-                    self.preloadImage(for: copy)
-                    if let titleConfig = copy.payload?.titleConfig, let customFont = titleConfig.customFont, let url = URL(string: customFont) {
-                        copy.payload?.titleFontData = await self.extractFont(url: url, fontSize: nil, size: titleConfig.size)
-                    }
-                    if let bodyConfig = copy.payload?.bodyConfig, let customFont = bodyConfig.customFont, let url = URL(string: customFont) {
-                        copy.payload?.bodyFontData = await self.extractFont(url: url, fontSize: nil, size: bodyConfig.size)
-                    }
-                    let buttons: [InAppButtonPayload] = copy.payload?.buttons ?? []
-                    var updatedButtons: [InAppButtonPayload] = []
-                    for button in buttons {
-                        var copyButton = button
-                        if let buttonConfig = copyButton.buttonConfig, let customFont = buttonConfig.fontURL {
-                            copyButton.fontData = await self.extractFont(url: customFont, fontSize: nil, size: CGFloat(buttonConfig.size))
-                        }
-                        updatedButtons.append(copyButton)
-                    }
-                    copy.payload?.buttons = updatedButtons
-                    messagesToReturn.append(copy)
+            Task(priority: .background) {
+                let result: [InAppMessage] = await self.processMessages(inAppMessages)
+                await MainActor.run {
+                    continuation.resume(returning: result)
                 }
-                continuation.resume(returning: messagesToReturn)
             }
         }
     }
@@ -786,27 +803,6 @@ final class InAppMessagesManager: InAppMessagesManagerType, @unchecked Sendable 
         return messages
     }
 
-    func extractFontNew(url: URL, fontSize: String?, size: CGFloat?) -> InAppButtonFontData? {
-        if let data = try? Data(contentsOf: url),
-           let dataProvider = CGDataProvider(data: data as CFData),
-           let cgFont = CGFont(dataProvider) {
-            var fontData: InAppButtonFontData = .init()
-            var error: Unmanaged<CFError>?
-            if CTFontManagerRegisterGraphicsFont(cgFont, &error) {
-                let size = size ?? fontSize?.convertPxToFloatWithDefaultValue() ?? 13
-                fontData.fontName = cgFont.postScriptName as? String
-                CTFontManagerUnregisterGraphicsFont(cgFont, &error)
-                fontData.fontSize = size
-                fontData.fontData = data.base64EncodedString()
-                if let fontName = cgFont.postScriptName as? String {
-                    fontData.loadedFont = UIFont(name: fontName, size: size)
-                }
-            }
-            return fontData
-        }
-        return nil
-    }
-    
     private func extractFont(base64: String?, size: CGFloat?) -> UIFont? {
         if let base64 = base64,
            let data = Data(base64Encoded: base64),
@@ -825,7 +821,6 @@ final class InAppMessagesManager: InAppMessagesManagerType, @unchecked Sendable 
         return nil
     }
 
-    
     @discardableResult
     func loadMessageToShow(for event: [DataType]) -> InAppMessage? {
         loadMessagesToShow(for: event).randomElement()
