@@ -36,6 +36,9 @@ extension Int: JSONConvertible {
 }
 extension Double: JSONConvertible {
     public var jsonValue: JSONValue {
+        guard self.isFinite else {
+            return .null("")
+        }
         return .double(self)
     }
 }
@@ -66,22 +69,27 @@ public indirect enum JSONValue: Sendable {
     case array([JSONValue])
     case null(String)
 
+    public static func convert(value: Any) -> JSONValue? {
+        var result: JSONValue?
+        switch value {
+        case let castedValue as Bool: result = .bool(castedValue)
+        case let castedValue as Int: result = .int(castedValue)
+        case let castedValue as Double where castedValue.isFinite: result = .double(castedValue)
+        case let castedValue as String: result = .string(castedValue)
+        case let castedValue as [Any]: result = .array(convert(castedValue))
+        case let castedValue as [String: Any]: result = .dictionary(convert(castedValue))
+        default:
+            Exponea.logger.log(.warning, message: "Can't convert value to JSONValue: \(value).")
+        }
+        return result
+    }
+
     public static func convert(_ dictionary: [String: Any]) -> [String: JSONValue] {
         var result: [String: JSONValue] = [:]
         for (key, value) in dictionary {
-            // swiftlint:disable force_cast
-            switch value {
-            case is Bool: result[key] = .bool(value as! Bool)
-            case is Int: result[key] = .int(value as! Int)
-            case is Double: result[key] = .double(value as! Double)
-            case is String: result[key] = .string(value as! String)
-            case is [Any]: result[key] = .array(convert(value as! [Any]))
-            case is [String: Any]: result[key] = .dictionary(convert(value as! [String: Any]))
-            default:
-                Exponea.logger.log(.warning, message: "Can't convert value to JSONValue: \(value).")
-                continue
+            if let castedValue = convert(value: value) {
+                result[key] = castedValue
             }
-            // swiftlint:enable force_cast
         }
         return result
     }
@@ -89,18 +97,8 @@ public indirect enum JSONValue: Sendable {
     public static func convert(_ array: [Any]) -> [JSONValue] {
         var result: [JSONValue] = []
         for value in array {
-            switch value {
-            // swiftlint:disable force_cast
-            case is Bool: result.append(.bool(value as! Bool))
-            case is Int: result.append(.int(value as! Int))
-            case is Double: result.append(.double(value as! Double))
-            case is String: result.append(.string(value as! String))
-            case is [Any]: result.append(.array(convert(value as! [Any])))
-            case is [String: Any]: result.append(.dictionary(convert(value as! [String: Any])))
-            // swiftlint:enable force_cast
-            default:
-                Exponea.logger.log(.warning, message: "Can't convert value to JSONValue: \(value).")
-                continue
+            if let castedValue = convert(value: value) {
+                result.append(castedValue)
             }
         }
         return result
@@ -113,7 +111,7 @@ public extension JSONValue {
         case .string(let string): return string
         case .bool(let bool): return bool
         case .int(let int): return int
-        case .double(let double): return double
+        case .double(let double): return double.isFinite ? double : NSNull()
         case .dictionary(let dictionary): return dictionary.mapValues { $0.rawValue }
         case .array(let array): return array.map { $0.rawValue }
         case .null(_): return NSNull()
@@ -125,7 +123,7 @@ public extension JSONValue {
         case .string(let string): return string
         case .bool(let bool): return bool
         case .int(let int): return int
-        case .double(let double): return double
+        case .double(let double): return double.isFinite ? double : NSNull()
         case .dictionary(let dictionary): return dictionary.mapValues { $0.jsonConvertible }
         case .array(let array): return array.map { $0.jsonConvertible }
         case .null(_): return NSNull()
@@ -155,7 +153,12 @@ extension JSONValue: Codable, Equatable {
                         self = .int(try container.decode(Int.self))
                     } catch {
                         do {
-                            self = .double(try container.decode(Double.self))
+                            let double = try container.decode(Double.self)
+                            if double.isFinite {
+                                self = .double(double)
+                            } else {
+                                self = .null("")
+                            }
                         } catch {
                             self = .bool(try container.decode(Bool.self))
                         }
@@ -172,7 +175,10 @@ extension JSONValue: Codable, Equatable {
         case .string(let string): try container.encode(string)
         case .array(let array): try container.encode(array)
         case .bool(let bool): try container.encode(bool)
-        case .double(let double): try container.encode(double)
+        case .double(let double):
+            if double.isFinite {
+                try container.encode(double)
+            }
         case .dictionary(let dictionary): try container.encode(dictionary)
         case .null(_): try container.encodeNil()
         }
@@ -199,7 +205,7 @@ public extension JSONValue {
         case .int(let int): return NSNumber(value: int)
         case .string(let string): return NSString(string: string)
         case .array(let array): return array.map({ $0.objectValue }) as NSArray
-        case .double(let double): return NSNumber(value: double)
+        case .double(let double): return double.isFinite ? NSNumber(value: double) : NSNull()
         case .dictionary(let dictionary): return dictionary.mapValues({ $0.objectValue }) as NSDictionary
         case .null(_): return NSNull()
         }
