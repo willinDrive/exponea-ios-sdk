@@ -11,6 +11,27 @@ parentDocSlug: ios-sdk
 > Refer to the [SDK version update guide](https://documentation.bloomreach.com/engagement/docs/ios-sdk-version-update) for details on updating to the next major version.
 
 ## Release Notes
+## Release Notes for 3.8.1
+#### October 07, 2025
+* Fixed:
+  * Fixes GIF image display using CADisplayLink for smoother animation
+
+
+## Release Notes for 3.8.0
+#### October 01, 2025
+* Added:
+  * Adds Multiple Mobile applications feature
+
+
+## Release Notes for 3.7.0
+#### September 25, 2025
+* Added:
+  * Updates SwiftSoup library to next major version (from 2.7.6).
+  * Replace age with timestamp for tracked Engagement events.
+* Fixed:
+  * Fixes Xcode 26 build issues related to 'performAndWait' method.
+
+
 ## Release Notes for 3.6.0
 #### July 31, 2025
 * Added:

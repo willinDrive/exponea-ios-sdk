@@ -27,7 +27,7 @@ class TrackCustomer: NSManagedObjectWithContext, DatabaseObject {
     @NSManaged public var retries: NSNumber
 
     var dataTypes: [DataType] {
-        let data: [DataType]? = managedObjectContext?.performAndWait {
+        let data: [DataType]? = managedObjectContext?.performAndWaitSafely {
             var data: [DataType] = []
             // Convert all properties to key value items.
             if let properties = properties as? Set<KeyValueItem> {
@@ -44,6 +44,13 @@ class TrackCustomer: NSManagedObjectWithContext, DatabaseObject {
                     props[key] = DatabaseManager.processObject(object)
                 })
                 data.append(.properties(props))
+            }
+            // Filter out pushNotificationToken if any
+            data = data.filter {
+                guard case .pushNotificationToken = $0 else {
+                    return true
+                }
+                return false
             }
 
             return data

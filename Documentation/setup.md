@@ -35,7 +35,7 @@ The instructions below are for Xcode 15.1 and may differ if you use a different 
 
 Optionally, you can specify the `ExponeaSDK` version as follows to let `pod` automatically any smaller than minor version updates:
 ```
-pod "ExponeaSDK", "~> 3.6.0"
+pod "ExponeaSDK", "~> 3.8.1"
 ```
 For more information, refer to [Specifying pod versions](https://guides.cocoapods.org/using/the-podfile.html#specifying-pod-versions) in the Cocoapods documentation.
 
@@ -98,6 +98,22 @@ Exponea.shared.configure(
 Your `AppDelegate`'s `application:didFinishLaunchingWithOptions` method is typically a good place to do the initialization but, depending on your application design, it can be anywhere in your code.
 
 At this point, the SDK is active and should now be tracking customers and events in your app.
+
+####Configure application ID
+*Multiple mobile apps:* If your Engagement project supports multiple mobile apps, specify the `applicationId` in your configuration. This helps distinguish between different apps in your project.
+
+```swift
+Exponea.shared.configure(
+    Exponea.ProjectSettings(
+        projectToken: "YOUR PROJECT TOKEN",
+        authorization: .token("YOUR API KEY"),
+        baseUrl: "https://api.exponea.com",
+        applicationId: "<Your application id>" 
+    ),
+    pushNotificationTracking: .disabled
+)
+```
+*Single mobile app:* If your Engagement project supports only one app, you can skip the `applicationId` configuration. The SDK will automatically use the default value "default-application".
 
 SDK initialization immediately creates a new customer profile with a new cookie [soft ID](https://documentation.bloomreach.com/engagement/docs/customer-identification#soft-id) unless the customer has been [identified](https://documentation.bloomreach.com/engagement/docs/ios-sdk-tracking#identify) previously.
 
